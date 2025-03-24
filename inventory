@@ -1,0 +1,5 @@
+[devops]
+192.168.122.164 
+
+[devops:vars]
+ansible_user={{ ansible_user }}
