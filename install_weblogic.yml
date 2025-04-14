@@ -1,0 +1,169 @@
+---
+- name: Install weblogic in centos 8
+  hosts: devops
+  become: yes
+  vars:
+    ORACLE_BASE: /home/weblogic/wls/oracle
+    DOMAIN_BASE: /home/weblogic/wls/domains
+    ORACLE_HOME: /home/weblogic/wls/oracle/product/fmw14
+    MW_HOME: /home/weblogic/wls/oracle/product/fmw14
+    WLS_HOME: "/home/weblogic/wls/oracle/product/fmw14/wlserver"
+    WL_HOME: "/home/weblogic/wls/oracle/product/fmw14/wlserver"
+    DOMAIN_HOME: "/home/weblogic/wls/domains/TEST"
+    JAVA_HOME: "/usr/java/jdk1.8.0_202-amd64"
+    PATH: "/usr/java/jdk1.8.0_202-amd64/bin:$PATH:$HOME/bin"
+  vars_files:
+  - secrets.yml
+  tasks:
+    - name: copy java package
+      copy:
+        src: /root/install-weblogic-playbook/jdk-8u202-linux-x64.rpm
+        dest: /home/
+        remote_src: no
+    - name: copy weblogic server
+      copy:
+        src: /root/install-weblogic-playbook/fmw_14.1.1.0.0_wls_Disk1_1of1.zip
+        dest: /home/
+        remote_src: no
+    - name: install unzipweblogic_password
+      yum:
+        name: unzip
+        state: present
+    - name: unzip weblogic server
+      unarchive:
+        src: /home/fmw_14.1.1.0.0_wls_Disk1_1of1.zip
+        dest: /home/
+        remote_src: yes
+    - name: Install Oracle JDK from RPM (only if not already installed)
+      yum:
+        name: /home/jdk-8u202-linux-x64.rpm
+        state: present    
+    # - name: install oracle jdk
+    #   shell: rpm -ivh /home/jdk-8u202-linux-x64.rpm
+    - name: export some variables
+      blockinfile:
+        path: /root/.bash_profile
+        block: |
+          export JAVA_HOME=/usr/java/jdk1.8.0_202-amd64
+          PATH=$JAVA_HOME/bin:$PATH:$HOME/bin
+          export PATH
+    - name: create weblogic user to play with
+      user:
+        name: weblogic
+        state: present      
+        create_home: yes
+        password: "{{ weblogic_password | password_hash('sha512') }}"    
+    - name: export some important environmental variables
+      blockinfile:
+        path: /home/weblogic/.bash_profile 
+        block: |
+          export ORACLE_BASE=/home/weblogic/wls/oracle
+          export ORACLE_HOME=$ORACLE_BASE/product/fmw14
+          export MW_HOME=$ORACLE_HOME
+          export WLS_HOME=$MW_HOME/wlserver
+          export WL_HOME=$WLS_HOME
+          export DOMAIN_BASE=$ORACLE_BASE/config/domains
+          export DOMAIN_HOME=$DOMAIN_BASE/TEST
+          export JAVA_HOME=/usr/java/jdk1.8.0_202-amd64
+          export PATH=$JAVA_HOME/bin:$PATH:$HOME/bin
+      become_user: weblogic
+    - name: source the weblogic profile 
+      shell: source /home/weblogic/.bash_profile
+      become_user: weblogic
+    - name: create the directories needed for work
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: weblogic
+        group: weblogic
+        mode: "775"
+        recurse: yes
+      loop:
+        - "{{ ORACLE_BASE }}"  
+        - "{{ DOMAIN_BASE }}"  
+        - "{{ ORACLE_HOME }}"  
+        - "{{ ORACLE_BASE }}/config/applications"  
+        - "/home/weblogic/wls/oraInventory"
+      become_user: weblogic  
+    - name: create oraInst.loc
+      file:
+        path: /home/weblogic/wls/oraInst.loc
+        state: touch
+      become_user: weblogic  
+    - name: configure oraInst.loc
+      blockinfile:
+        path: /home/weblogic/wls/oraInst.loc
+        block: |
+          inventory_loc=/home/weblogic/wls/oraInventory
+          inst_group=weblogic
+    - name: create wls.rsp
+      file:
+        path: /home/weblogic/wls/wls.rsp
+        state: touch
+      become_user: weblogic  
+    - name: configure wls.rsp
+      blockinfile:
+        path: /home/weblogic/wls/wls.rsp
+        block: |
+          [ENGINE]
+          Response File Version=1.0.0.0.0
+          [GENERIC]
+          ORACLE_HOME=/home/weblogic/wls/oracle/product/fmw14
+          INSTALL_TYPE=WebLogic Server
+          DECLINE_SECURITY_UPDATES=true
+          SECURITY_UPDATES_VIA_MYORACLESUPPORT=false
+      become_user: weblogic 
+    - name: set permissions
+      shell: "{{ item }}"
+      loop:
+        - "chmod -R 775 /home/weblogic/wls/oraInventory"
+        - "chown -R weblogic:weblogic /home/weblogic/wls/oraInventory"           
+    - name: copy weblogic server to oracle base
+      copy:
+        src: /home/fmw_14.1.1.0.0_wls.jar
+        dest: "{{ ORACLE_BASE }}"
+        remote_src: yes
+      become_user: weblogic
+    - name: install the server 
+      shell: |
+          export JAVA_HOME=/usr/java/jdk1.8.0_202-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
+          java -jar {{ ORACLE_BASE }}/fmw_14.1.1.0.0_wls.jar -silent -responseFile /home/weblogic/wls/wls.rsp -invPtrLoc /home/weblogic/wls/oraInst.loc 
+      become_user: weblogic
+    - name: starting the configuration 
+      shell: |
+          export MW_HOME=$ORACLE_HOME
+          export WLS_HOME=$MW_HOME/wlserver
+          export WL_HOME=$WLS_HOME
+          /home/weblogic/wls/oracle/product/fmw14/oracle_common/common/bin/commEnv.sh
+    - name: create configuration file 
+      file:
+        src: "{{ WL_HOME }}/common/bin/configure_domain.py"
+        state: touch
+        become_user: weblogic
+    - name: write the configurations
+      blockinfile:
+        src: "{{ WL_HOME }}/common/bin/configure_domain.py"
+        become_user: weblogic
+        block: |
+          readTemplate('/home/weblogic/wls/oracle/product/fmw14/wlserver/common/templates/wls/wls.jar')
+          cd('Servers/AdminServer')
+          set('ListenAddress','{{ ansible_default_ipv4.address }}')
+          set('ListenPort',7001)
+          create('AdminServer','SSL')
+          cd('SSL/AdminServer')      
+          set('Enabled','true')
+          set('ListenPort',7002)
+          cd('/')
+          cd('Security/base_domain/User/weblogic')
+          cmo.setPassword('Test1234')
+          setOption('OverwriteDomain','true')
+          writeDomain('/home/weblogic/wls/oracle/config/domains/TEST')
+          closeTemplate()
+          exit()
+    - name: open oracle shell 
+      shell: "{{ WL_HOME }}/common/bin/wlst.sh  {{ WL_HOME }}/common/bin/configure_domain.py"
+      become_user: weblogic
+    - name: run the server
+      shell: "{{ DOMAIN_HOME }}/bin/startWebLogic.sh &"
+
