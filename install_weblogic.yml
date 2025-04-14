@@ -25,16 +25,16 @@
         src: /root/install-weblogic-playbook/fmw_14.1.1.0.0_wls_Disk1_1of1.zip
         dest: /home/
         remote_src: no
-    - name: install unzipweblogic_password
+    - name: install unzip 
       yum:
         name: unzip
         state: present
-    - name: unzip weblogic server
+    - name: unzip weblogic server installer
       unarchive:
         src: /home/fmw_14.1.1.0.0_wls_Disk1_1of1.zip
         dest: /home/
         remote_src: yes
-    - name: Install Oracle JDK from RPM (only if not already installed)
+    - name: Install Oracle JDK from RPM
       yum:
         name: /home/jdk-8u202-linux-x64.rpm
         state: present    
@@ -96,6 +96,7 @@
         block: |
           inventory_loc=/home/weblogic/wls/oraInventory
           inst_group=weblogic
+      become_user: weblogic    
     - name: create wls.rsp
       file:
         path: /home/weblogic/wls/wls.rsp
@@ -172,5 +173,7 @@
         {{ WL_HOME }}/common/bin/wlst.sh  {{ WL_HOME }}/common/bin/configure_domain.py
       become_user: weblogic
     - name: run the server
-      shell: "/home/weblogic/wls/oracle/config/domains/TEST/bin/startWebLogic.sh &"
-
+      shell: "/home/weblogic/wls/oracle/config/domains/TEST/bin/startWebLogic.sh"
+      become_user: weblogic
+      poll: 0
+      async: 6 
