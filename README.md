@@ -1,5 +1,3 @@
-Below is the entire content as a single block. Simply copy everything into one file (for example, `README.md`):
-
 ```markdown
 # WebLogic Installation Using Ansible
 

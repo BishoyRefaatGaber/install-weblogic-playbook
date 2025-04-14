@@ -127,8 +127,7 @@
       become_user: weblogic
     - name: install the server 
       shell: |
-          export JAVA_HOME=/usr/java/jdk1.8.0_202-amd64
-          export PATH=$JAVA_HOME/bin:$PATH
+          source /home/weblogic/.bash_profile
           java -jar {{ ORACLE_BASE }}/fmw_14.1.1.0.0_wls.jar -silent -responseFile /home/weblogic/wls/wls.rsp -invPtrLoc /home/weblogic/wls/oraInst.loc 
       become_user: weblogic
     # - name: starting the configuration 
@@ -165,10 +164,7 @@
           exit()
     - name: open oracle shell 
       shell: |
-        export ORACLE_HOME=/home/weblogic/wls/oracle/product/fmw14
-        export MW_HOME=$ORACLE_HOME
-        export WLS_HOME=$MW_HOME/wlserver
-        export WL_HOME=$WLS_HOME
+        source /home/weblogic/.bash_profile
         /home/weblogic/wls/oracle/product/fmw14/oracle_common/common/bin/commEnv.sh
         {{ WL_HOME }}/common/bin/wlst.sh  {{ WL_HOME }}/common/bin/configure_domain.py
       become_user: weblogic
@@ -176,4 +172,4 @@
       shell: "/home/weblogic/wls/oracle/config/domains/TEST/bin/startWebLogic.sh"
       become_user: weblogic
       poll: 0
-      async: 6 
+      async: 3600
