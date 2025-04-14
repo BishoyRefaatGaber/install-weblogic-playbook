@@ -1,11 +1,159 @@
-    Prerequisites
+wget https://download.oracle.com/otn/java/jdk/8u202-b08/1961070e4c9b4e26a04e7f5a083f551e/jdk-8u202-linux-x64.rpm
+rpm -ivh jdk-8u202-linux-x64.rpm
 
-    Before starting this tutorial, download the following to your Linux machine:
-        Oracle Java Developers Kit version 1.7.0_55+
-            wget https://download.oracle.com/java/24/latest/jdk-24_linux-x64_bin.deb
-            wget https://download.oracle.com/java/24/latest/jdk-24_linux-x64_bin.tar.gz
-        Oracle WebLogic Server 12c (12.1.3) generic installer (includes Oracle Coherence)
-            wget https://www.oracle.com/webapps/redirect/signon?nexturl=https://download.oracle.com/otn/nt/middleware/14c/14110/fmw_14.1.1.0.0_wls_lite_Disk1_1of1.zip
+
+vi /root/.bash_profile
+export JAVA_HOME=/usr/java/jdk1.8.0_202-amd64
+PATH=$JAVA_HOME/bin:$PATH:$HOME/bin
+export PATH
+
+
+
+For Oracle database installation, it's a requirement that the installation must be done using non-root user
+
+useradd weblogic 
+passwd weblogic
+su -l weblogic
+
+define these variables 
+
+    ORACLE BASE :: Default Oracle installer directory location
+    ORACLE HOME :: Default Oracle database directory location / optional if have Oracle client inside
+    MW HOME :: Default Middleware installer directory location
+    WLS HOME :: Default Oracle Weblogic managed server directory location
+    WL HOME :: Default Oracle Weblogic admin server directory location
+    DOMAIN BASE :: Default Oracle Weblogic global domain
+    DOMAIN HOME :: Default Oracle Weblogic specific domain
+
+
+ vi /home/weblogic/.bash_profile  
+
+# Set base directories
+export ORACLE_BASE=/home/weblogic/wls/oracle
+export ORACLE_HOME=$ORACLE_BASE/product/fmw14
+export MW_HOME=$ORACLE_HOME
+export WLS_HOME=$MW_HOME/wlserver
+export WL_HOME=$WLS_HOME  # Simplified (no need for redundant variable)
+
+# Domain paths
+export DOMAIN_BASE=$ORACLE_BASE/config/domains
+export DOMAIN_HOME=$DOMAIN_BASE/TEST
+
+# Java setup
+export JAVA_HOME=/usr/java/jdk1.8.0_202-amd64  # Use underscores, not hyphens
+export PATH=$JAVA_HOME/bin:$PATH:$HOME/bin
+
+source /home/weblogic/.bash_profile
+
+# Create directories using the variables
+mkdir -p $ORACLE_BASE
+mkdir -p $DOMAIN_BASE
+mkdir -p $ORACLE_HOME
+mkdir -p $ORACLE_BASE/config/applications
+mkdir -p /home/weblogic/wls/oraInventory  # Fixed path
+
+
+
+# lets install weblogic
+cd wls
+
+
+
+vi oraInst.loc
+inventory_loc=/home/weblogic/wls/oraInventory
+inst_group=weblogic
+
+
+ vi wls.rsp
+[ENGINE]
+Response File Version=1.0.0.0.0
+[GENERIC]
+ORACLE_HOME=/home/weblogic/wls/oracle/product/fmw14
+INSTALL_TYPE=WebLogic Server
+DECLINE_SECURITY_UPDATES=true
+SECURITY_UPDATES_VIA_MYORACLESUPPORT=false
+
+
+
+chmod -R 775 /home/weblogic/wls/oraInventory
+chown -R weblogic:weblogic /home/weblogic/wls/oraInventory
+
+getent group weblogic || sudo groupadd weblogic
+
+cd $ORACLE_BASE
+
+wget https://www.oracle.com/webapps/redirect/signon?nexturl=https://download.oracle.com/otn/nt/middleware/14c/14110/fmw_14.1.1.0.0_wls_lite_Disk1_1of1.zip
+unzip fmw_14.1.1.0.0_wls_lite_Disk1_1of1.zip
+
+java -jar ./fmw_14.1.1.0.0_wls.jar -silent -responseFile /home/weblogic/wls/wls.rsp -invPtrLoc /home/weblogic/wls/oraInst.loc
+
+#Now we are in the configuration part, there will be 2 level of configuration that needs to be made which are:
+
+#    Weblogic Configuration
+#    Domain Configuration
+
+
+
+
+cd $WL_HOME
+cd common/bin/
+
+/home/weblogic/wls/oracle/product/fmw14/oracle_common/common/bin/commEnv.sh
+./wlst.sh
+
+# Corrected WLST script for creating a WebLogic domain
+
+# Start WLST
+wls:/offline> readTemplate('/home/weblogic/wls/oracle/product/fmw14/wlserver/common/templates/wls/wls.jar')
+
+# Configure Admin Server
+wls:/offline/base_domain> cd('Servers/AdminServer')
+wls:/offline/base_domain/Server/AdminServer> set('ListenAddress','<server-IP>')  # Fixed attribute name
+wls:/offline/base_domain/Server/AdminServer> set('ListenPort',7001)
+
+# Create SSL Configuration
+wls:/offline/base_domain/Server/AdminServer> create('AdminServer','SSL')  # Create SSL MBean
+wls:/offline/base_domain/Server/AdminServer> cd('SSL/AdminServer')
+wls:/offline/base_domain/Server/AdminServer/SSL/AdminServer> set('Enabled','true')  # Use lowercase 'true'
+wls:/offline/base_domain/Server/AdminServer/SSL/AdminServer> set('ListenPort',7002)
+
+# Configure Security
+wls:/offline/base_domain/Server/AdminServer/SSL/AdminServer> cd('/')
+
+wls:/offline/base_domain> cd('Security/base_domain/User/weblogic')  # Correct security path
+wls:/offline/base_domain/Security/base_domain/User/weblogic> cmo.setPassword('Test1234')
+
+# Finalize Domain
+wls:/offline/base_domain/Security/base_domain/User/weblogic> setOption('OverwriteDomain','true')
+wls:/offline/base_domain> writeDomain('/home/weblogic/wls/oracle/config/domains/TEST')  # Use DOMAIN_HOME variable
+
+# Cleanup
+wls:/offline/TEST/Security/TEST/User/weblogic> closeTemplate()
+wls:/offline> exit()
+
+
+cd $DOMAIN_HOME
+cd bin/ 
+./startWebLogic.sh & 
+
+netstat -apn | grep -i :70
+
+
+#make a copy of Weblogic configuration ONLY and paste it on each managed server node
+
+$WL_HOME/common/bin/pack.sh -domain=/home/shahril/wls/oracle/config/domains/TEST \
+
+$WL_HOME/common/bin/pack.sh -domain=$DOMAIN_HOME -template=$WL_HOME/common/templates/domains/TEST_template.jar -template_name=TEST -managed=true 
+scp -r /home/shahril/wls/oracle/product/fmw12/wlserver/common/templates/domains/TEST_template.jar 172.17.0.7:/home/shahril/wls/ 
+# go to the other node then do this 
+cd $WL_HOME 
+$WL_HOME/common/bin/unpack.sh -template=/home/shahril/wls/TEST_template.jar -domain=$DOMAIN_HOME 
+#start the server in the managed node 
+cd $DOMAIN_HOME
+cd bin/ 
+./stopManagedWebLogic.sh Node_Server01 t3://172.17.0.6:7001 weblogic Test1234 
+./startManagedWebLogic.sh Node_Server01 t3://172.17.0.6:7001 & 
+
 
 
 
