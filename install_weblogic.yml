@@ -130,21 +130,22 @@
           export PATH=$JAVA_HOME/bin:$PATH
           java -jar {{ ORACLE_BASE }}/fmw_14.1.1.0.0_wls.jar -silent -responseFile /home/weblogic/wls/wls.rsp -invPtrLoc /home/weblogic/wls/oraInst.loc 
       become_user: weblogic
-    - name: starting the configuration 
-      shell: |
-          export MW_HOME=$ORACLE_HOME
-          export WLS_HOME=$MW_HOME/wlserver
-          export WL_HOME=$WLS_HOME
-          /home/weblogic/wls/oracle/product/fmw14/oracle_common/common/bin/commEnv.sh
+    # - name: starting the configuration 
+    #   shell: |
+    #       export ORACLE_HOME=/home/weblogic/wls/oracle/product/fmw14
+    #       export MW_HOME=$ORACLE_HOME
+    #       export WLS_HOME=$MW_HOME/wlserver
+    #       export WL_HOME=$WLS_HOME
+    #       /home/weblogic/wls/oracle/product/fmw14/oracle_common/common/bin/commEnv.sh
     - name: create configuration file 
       file:
-        src: "{{ WL_HOME }}/common/bin/configure_domain.py"
+        path: "{{ WL_HOME }}/common/bin/configure_domain.py"
         state: touch
-        become_user: weblogic
+      become_user: weblogic
     - name: write the configurations
+      become_user: weblogic
       blockinfile:
-        src: "{{ WL_HOME }}/common/bin/configure_domain.py"
-        become_user: weblogic
+        path: "{{ WL_HOME }}/common/bin/configure_domain.py"
         block: |
           readTemplate('/home/weblogic/wls/oracle/product/fmw14/wlserver/common/templates/wls/wls.jar')
           cd('Servers/AdminServer')
@@ -162,8 +163,14 @@
           closeTemplate()
           exit()
     - name: open oracle shell 
-      shell: "{{ WL_HOME }}/common/bin/wlst.sh  {{ WL_HOME }}/common/bin/configure_domain.py"
+      shell: |
+        export ORACLE_HOME=/home/weblogic/wls/oracle/product/fmw14
+        export MW_HOME=$ORACLE_HOME
+        export WLS_HOME=$MW_HOME/wlserver
+        export WL_HOME=$WLS_HOME
+        /home/weblogic/wls/oracle/product/fmw14/oracle_common/common/bin/commEnv.sh
+        {{ WL_HOME }}/common/bin/wlst.sh  {{ WL_HOME }}/common/bin/configure_domain.py
       become_user: weblogic
     - name: run the server
-      shell: "{{ DOMAIN_HOME }}/bin/startWebLogic.sh &"
+      shell: "/home/weblogic/wls/oracle/config/domains/TEST/bin/startWebLogic.sh"
 
