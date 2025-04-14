@@ -172,5 +172,5 @@
         {{ WL_HOME }}/common/bin/wlst.sh  {{ WL_HOME }}/common/bin/configure_domain.py
       become_user: weblogic
     - name: run the server
-      shell: "/home/weblogic/wls/oracle/config/domains/TEST/bin/startWebLogic.sh"
+      shell: "/home/weblogic/wls/oracle/config/domains/TEST/bin/startWebLogic.sh &"
 
